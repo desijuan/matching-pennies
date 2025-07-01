@@ -1,0 +1,144 @@
+pragma language_version 0.16;
+
+import CompactStandardLibrary;
+
+export ledger instance: Counter;
+
+export enum Choice { HEADS, TAILS }
+
+export struct Jugada {
+    address: Bytes<32>,
+    timestamp: Uint<64>, // en segundos
+    choice: Bytes<32>, // secreto
+    reveal: Maybe<Choice>,
+}
+
+// Jugador A: Matcher
+export ledger jugadaMatcher: Maybe<Jugada>;
+// Jugador B: Mismatcher
+export ledger jugadaMismatcher: Maybe<Jugada>;
+
+enum Winner { Nil, Matcher, Mismatcher }
+
+struct Score {
+    instance: Uint<32>,
+    winner: Winner,
+    address: Bytes<32>,
+}
+
+export ledger lastGameScore: Score;
+
+constructor() {
+    lastGameScore = Score{
+        instance: instance as Field as Uint<32>,
+        winner: Winner.Nil,
+        address: pad(32, ""),
+    };
+    newGame();
+}
+
+witness localSecretKey(): Bytes<32>;
+
+// Assumed to be public and trustworthy
+witness playerId(): Bytes<32>;
+witness timestamp(): Uint<64>;
+
+export circuit jugar(choice: Choice): [] {
+    assert(jugadaMatcher == none<Jugada>() || jugadaMismatcher == none<Jugada>(), "Ya hay dos jugadas");
+    assert(jugadaMatcher == none<Jugada>() || jugadaMatcher.value.address != disclose(playerId()), "Ya jugaste ameo");
+
+    const jugada = some<Jugada>(Jugada{
+        address: disclose(playerId()),
+        timestamp: disclose(timestamp()),
+        choice: disclose(publicKey(choice as Field as Bytes<32>, localSecretKey(), instance as Field as Bytes<32>)),
+        reveal: none<Choice>(),
+    });
+
+    if (jugadaMatcher == none<Jugada>()) {
+        jugadaMatcher = jugada;
+    } else {
+        jugadaMismatcher = jugada;
+    }
+}
+
+export circuit revelar(choice: Choice): [] {
+    assert(jugadaMatcher != none<Jugada>() && jugadaMismatcher != none<Jugada>(), "No hay dos jugadas");
+    assert(jugadaMatcher.value.address == disclose(playerId()) || jugadaMismatcher.value.address == disclose(playerId()), "No sos jugador");
+
+    if (jugadaMatcher.value.address == disclose(playerId())) {
+        assert(jugadaMatcher.value.reveal == none<Choice>(), "Ya revelaste");
+        assert(jugadaMatcher.value.choice == publicKey(choice as Field as Bytes<32>, localSecretKey(), instance as Field as Bytes<32>), "Mentira!");
+
+        jugadaMatcher = some<Jugada>(Jugada{
+            ...jugadaMatcher.value,
+            reveal: some<Choice>(disclose(choice))
+        });
+    } else {
+        assert(jugadaMismatcher.value.reveal == none<Choice>(), "Ya revelaste");
+        assert(jugadaMismatcher.value.choice == publicKey(choice as Field as Bytes<32>, localSecretKey(), instance as Field as Bytes<32>), "Mentira!");
+
+        jugadaMismatcher = some<Jugada>(Jugada{
+            ...jugadaMismatcher.value,
+            reveal: some<Choice>(disclose(choice))
+        });
+    }
+}
+
+export circuit resolverPartida(): [] {
+    assert(jugadaMatcher != none<Jugada>(), "No jugó el jugador A");
+    assert(jugadaMismatcher != none<Jugada>(), "No jugó el jugador B");
+
+    // Ninguno reveló
+    if (jugadaMatcher.value.reveal == none<Choice>() && jugadaMismatcher.value.reveal == none<Choice>()) {
+        // Si pasaron 5 minutos desde que los dos jugaron declaramos empate
+        assert(timestamp() - jugadaMismatcher.value.timestamp > 300, "Todavía no pasaron 5 minutos");
+
+        lastGameScore = Score{
+            instance: instance as Field as Uint<32>,
+            winner: Winner.Nil,
+            address: pad(32, ""),
+        };
+
+    // Reveló sólo el jugador A
+    } else if (jugadaMismatcher.value.reveal == none<Choice>()) {
+        // Si pasaron 5 minutos desde que los dos jugaron gana el jugador A
+        assert(timestamp() - jugadaMismatcher.value.timestamp > 300, "Todavía no pasaron 5 minutos");
+
+        lastGameScore = Score{
+            instance: instance as Field as Uint<32>,
+            winner: Winner.Matcher,
+            address: jugadaMatcher.value.address,
+        };
+
+    // Reveló sólo el jugador B
+    } else if (jugadaMatcher.value.reveal == none<Choice>()) {
+        // Si pasaron 5 minutos desde que los dos jugaron gana el jugador B
+        assert(timestamp() - jugadaMismatcher.value.timestamp > 300, "Todavía no pasaron 5 minutos");
+
+        lastGameScore = Score{
+            instance: instance as Field as Uint<32>,
+            winner: Winner.Mismatcher,
+            address: jugadaMismatcher.value.address,
+        };
+
+    // Revelaron los dos
+    } else { // En este caso no nos importa el timestamp de la última jugada
+        lastGameScore = Score{
+            instance: instance as Field as Uint<32>,
+            winner: (jugadaMatcher.value.reveal == jugadaMismatcher.value.reveal) ? Winner.Matcher : Winner.Mismatcher,
+            address: (jugadaMatcher.value.reveal == jugadaMismatcher.value.reveal) ? jugadaMatcher.value.address : jugadaMismatcher.value.address,
+        };
+    }
+
+    newGame();
+}
+
+circuit newGame(): [] {
+    jugadaMatcher = none<Jugada>();
+    jugadaMismatcher = none<Jugada>();
+    instance.increment(1);
+}
+
+pure circuit publicKey(value: Bytes<32>, sk: Bytes<32>, instance: Bytes<32>): Bytes<32> {
+    return persistentHash<Vector<4, Bytes<32>>>([pad(32, "matching:pennies:pk"), instance, sk, value]);
+}
