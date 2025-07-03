@@ -4,13 +4,11 @@ import CompactStandardLibrary;
 
 export ledger instance: Counter;
 
-export enum Choice { HEADS, TAILS }
-
 export struct Jugada {
     address: Bytes<32>,
     timestamp: Uint<64>, // en segundos
     choice: Bytes<32>, // secreto
-    reveal: Maybe<Choice>,
+    reveal: Maybe<Boolean>,
 }
 
 // Jugador A: Matcher
@@ -37,21 +35,19 @@ constructor() {
     newGame();
 }
 
-witness localSecretKey(): Bytes<32>;
-
-// Assumed to be public and trustworthy
+// Voy a asumir que estos dos valores son públicos y confiables
 witness playerId(): Bytes<32>;
 witness timestamp(): Uint<64>;
 
-export circuit jugar(choice: Choice): [] {
+export circuit commitJugada(choice: Boolean, secretKey: Bytes<32>): [] {
     assert(jugadaMatcher == none<Jugada>() || jugadaMismatcher == none<Jugada>(), "Ya hay dos jugadas");
     assert(jugadaMatcher == none<Jugada>() || jugadaMatcher.value.address != disclose(playerId()), "Ya jugaste ameo");
 
     const jugada = some<Jugada>(Jugada{
         address: disclose(playerId()),
         timestamp: disclose(timestamp()),
-        choice: disclose(publicKey(choice as Field as Bytes<32>, localSecretKey(), instance as Field as Bytes<32>)),
-        reveal: none<Choice>(),
+        choice: disclose(publicKey(choice as Field as Bytes<32>, secretKey, instance as Field as Bytes<32>)),
+        reveal: none<Boolean>(),
     });
 
     if (jugadaMatcher == none<Jugada>()) {
@@ -61,25 +57,25 @@ export circuit jugar(choice: Choice): [] {
     }
 }
 
-export circuit revelar(choice: Choice): [] {
+export circuit revealJugada(choice: Boolean, secretKey: Bytes<32>): [] {
     assert(jugadaMatcher != none<Jugada>() && jugadaMismatcher != none<Jugada>(), "No hay dos jugadas");
     assert(jugadaMatcher.value.address == disclose(playerId()) || jugadaMismatcher.value.address == disclose(playerId()), "No sos jugador");
 
     if (jugadaMatcher.value.address == disclose(playerId())) {
-        assert(jugadaMatcher.value.reveal == none<Choice>(), "Ya revelaste");
-        assert(jugadaMatcher.value.choice == publicKey(choice as Field as Bytes<32>, localSecretKey(), instance as Field as Bytes<32>), "Mentira!");
+        assert(jugadaMatcher.value.reveal == none<Boolean>(), "Ya revelaste");
+        assert(jugadaMatcher.value.choice == publicKey(choice as Field as Bytes<32>, secretKey, instance as Field as Bytes<32>), "Mentira!");
 
         jugadaMatcher = some<Jugada>(Jugada{
             ...jugadaMatcher.value,
-            reveal: some<Choice>(disclose(choice))
+            reveal: some<Boolean>(disclose(choice))
         });
     } else {
-        assert(jugadaMismatcher.value.reveal == none<Choice>(), "Ya revelaste");
-        assert(jugadaMismatcher.value.choice == publicKey(choice as Field as Bytes<32>, localSecretKey(), instance as Field as Bytes<32>), "Mentira!");
+        assert(jugadaMismatcher.value.reveal == none<Boolean>(), "Ya revelaste");
+        assert(jugadaMismatcher.value.choice == publicKey(choice as Field as Bytes<32>, secretKey, instance as Field as Bytes<32>), "Mentira!");
 
         jugadaMismatcher = some<Jugada>(Jugada{
             ...jugadaMismatcher.value,
-            reveal: some<Choice>(disclose(choice))
+            reveal: some<Boolean>(disclose(choice))
         });
     }
 }
@@ -89,8 +85,8 @@ export circuit resolverPartida(): [] {
     assert(jugadaMismatcher != none<Jugada>(), "No jugó el jugador B");
 
     // Ninguno reveló
-    if (jugadaMatcher.value.reveal == none<Choice>() && jugadaMismatcher.value.reveal == none<Choice>()) {
-        // Si pasaron 5 minutos desde que los dos jugaron declaramos empate
+    if (jugadaMatcher.value.reveal == none<Boolean>() && jugadaMismatcher.value.reveal == none<Boolean>()) {
+        // Si pasaron 5 minutos desde que los dos commitJugadaon declaramos empate
         assert(timestamp() - jugadaMismatcher.value.timestamp > 300, "Todavía no pasaron 5 minutos");
 
         lastGameScore = Score{
@@ -100,8 +96,8 @@ export circuit resolverPartida(): [] {
         };
 
     // Reveló sólo el jugador A
-    } else if (jugadaMismatcher.value.reveal == none<Choice>()) {
-        // Si pasaron 5 minutos desde que los dos jugaron gana el jugador A
+    } else if (jugadaMismatcher.value.reveal == none<Boolean>()) {
+        // Si pasaron 5 minutos desde que los dos commitJugadaon gana el jugador A
         assert(timestamp() - jugadaMismatcher.value.timestamp > 300, "Todavía no pasaron 5 minutos");
 
         lastGameScore = Score{
@@ -111,8 +107,8 @@ export circuit resolverPartida(): [] {
         };
 
     // Reveló sólo el jugador B
-    } else if (jugadaMatcher.value.reveal == none<Choice>()) {
-        // Si pasaron 5 minutos desde que los dos jugaron gana el jugador B
+    } else if (jugadaMatcher.value.reveal == none<Boolean>()) {
+        // Si pasaron 5 minutos desde que los dos commitJugadaon gana el jugador B
         assert(timestamp() - jugadaMismatcher.value.timestamp > 300, "Todavía no pasaron 5 minutos");
 
         lastGameScore = Score{
