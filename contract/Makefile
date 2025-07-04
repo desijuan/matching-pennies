@@ -3,3 +3,5 @@ compile:
 
 test:
 	npm run test
+
+.PHONY: compile test
