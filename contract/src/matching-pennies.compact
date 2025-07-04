@@ -35,13 +35,20 @@ constructor() {
     newGame();
 }
 
-// Voy a asumir que estos dos valores son públicos y confiables
 witness playerId(): Bytes<32>;
 witness timestamp(): Uint<64>;
 
 export circuit commitJugada(choice: Boolean, secretKey: Bytes<32>): [] {
-    assert(jugadaMatcher == none<Jugada>() || jugadaMismatcher == none<Jugada>(), "Ya hay dos jugadas");
-    assert(jugadaMatcher == none<Jugada>() || jugadaMatcher.value.address != disclose(playerId()), "Ya jugaste ameo");
+    assert(
+        jugadaMatcher == none<Jugada>() ||
+        jugadaMismatcher == none<Jugada>(),
+        "Ya hay dos jugadas"
+    );
+    assert(
+        jugadaMatcher == none<Jugada>() ||
+        jugadaMatcher.value.address != disclose(playerId()),
+        "Ya jugaste ameo"
+    );
 
     const jugada = some<Jugada>(Jugada{
         address: disclose(playerId()),
