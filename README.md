@@ -1,9 +1,15 @@
 # Matching Pennies
 
+## Install bun
+
+```bash
+sudo npm install -g bun
+```
+
 ## Install node modules
 
 ```bash
-npm install
+bun install
 ```
 
 ## Compile the contract
@@ -13,11 +19,11 @@ cd contract
 ```
 
 ```bash
-npm run compact && npm run build
+bun run compact && bun run build
 ```
 
 ## Run the tests
 
 ```bash
-npm run test
+bun run test
 ```

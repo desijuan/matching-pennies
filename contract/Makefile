@@ -1,7 +1,9 @@
+NPM ?= bun
+
 compile:
-	npm run compact && npm run build
+	$(NPM) run compact && $(NPM) run build
 
 test:
-	npm run test
+	$(NPM) run test
 
 .PHONY: compile test

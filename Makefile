@@ -1,15 +1,19 @@
-.DEFAULT_GOAL := test
+.DEFAULT_GOAL := all
+
+NPM := bun
 
 setup:
-	npm install
+	$(NPM) install
 
 compile:
-	$(MAKE) -C contract compile
+	$(MAKE) -C contract compile NPM=$(NPM)
 
 test:
-	$(MAKE) -C contract test
+	$(MAKE) -C contract test NPM=$(NPM)
 
 clean:
 	git clean -dxf
 
-.PHONY: setup compile test clean
+all: setup compile test
+
+.PHONY: all setup compile test clean
